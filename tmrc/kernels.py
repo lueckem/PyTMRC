@@ -13,6 +13,7 @@ import scipy.sparse.linalg as sla
 from tqdm import tqdm
 
 from scipy.spatial.distance import cdist
+from sklearn.metrics import pairwise_kernels
 
 class Kernel:
     """
@@ -136,8 +137,11 @@ class GaussianKernel(Kernel):
         array of shape [# x points, # y points]
             matrix with pairwise kernel evaluations
         """
-        distmat = cdist(x, y, 'sqeuclidean')
-        kmat =  np.exp(-distmat/self.epsi)
+        if x.shape[0] * y.shape[0] * x.shape[1] > 10 ** 6:
+            njobs = -1  # parallel computation
+        else:
+            njobs = None  # no parallel computation
+        kmat = pairwise_kernels(x, y, metric="rbf", gamma=1 / self.epsi, n_jobs=njobs)
         return kmat
     
     
