@@ -8,7 +8,7 @@ Manifold learning methods for parametrizing the transition manifold.
 import numpy as np
 import scipy
 import scipy.sparse.linalg as sla
-from sklearn.neighbors.kde import KernelDensity
+from sklearn.neighbors._kde import KernelDensity
 from scipy.integrate import dblquad
 
 

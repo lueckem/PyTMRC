@@ -16,7 +16,7 @@ import scipy
 from scipy.spatial import cKDTree
 from scipy.sparse.linalg import eigsh
 from scipy.ndimage.interpolation import shift
-from sklearn.neighbors.kde import KernelDensity
+from sklearn.neighbors._kde import KernelDensity
 from scipy.integrate import dblquad
 from sklearn.kernel_approximation import RBFSampler, Nystroem
 
@@ -219,7 +219,7 @@ class KernelTrajTransitionManifold(TransitionManifold):
         # indices of test points closest to trajectory points
         print("Sorting into Voronoi cells...")
         kdTree = cKDTree(Xtest)
-        closest = kdTree.query(X, n_jobs=-1)[1]
+        closest = kdTree.query(X, workers=-1)[1]
 
         # extract point clouds from trajectory
         pointclouds = []
