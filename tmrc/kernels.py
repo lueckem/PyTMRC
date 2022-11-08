@@ -137,10 +137,11 @@ class GaussianKernel(Kernel):
         array of shape [# x points, # y points]
             matrix with pairwise kernel evaluations
         """
-        if x.shape[0] * y.shape[0] * x.shape[1] > 10 ** 6:
-            njobs = -1  # parallel computation
-        else:
-            njobs = None  # no parallel computation
+        # if x.shape[0] * y.shape[0] * x.shape[1] > 10 ** 6:
+        #     njobs = -1  # parallel computation
+        # else:
+        #     njobs = None  # no parallel computation
+        njobs = None
         kmat = pairwise_kernels(x, y, metric="rbf", gamma=1 / self.epsi, n_jobs=njobs)
         return kmat
     
