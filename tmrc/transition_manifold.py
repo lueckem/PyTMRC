@@ -83,7 +83,7 @@ class KernelBurstTransitionManifold(TransitionManifold):
         self.kernel = kernel
         self.epsi = epsi
 
-    def fit(self, X, n_components=10, showprogress = True):
+    def fit(self, X, n_components=10, showprogress = True, numba=True):
         """
         Computes the reaction coordinate based on the data X.
 
@@ -100,28 +100,29 @@ class KernelBurstTransitionManifold(TransitionManifold):
         super().fit(X)
         
         #TODO update computational routine to new interface
+        if numba:
+            distMat = _numba_dist_matrix_gaussian_kernel(X, self.kernel.epsi)
+        else:
+            npoints, self.M = X.shape[:2]
+            X = _reshape(X)
 
-        distMat = _numba_dist_matrix_gaussian_kernel(X, self.kernel.epsi)
-        # npoints, self.M = X.shape[:2]
-        # X = _reshape(X)
-        #
-        # # compute symmetric kernel evaluations
-        # dXX = []
-        # print("Computing symmetric kernel evaluations...")
-        # sys.stdout.flush() # workaround for messed-up progress bars
-        # for i in tqdm(range(npoints), disable = not showprogress):
-        #     GXX = self.kernel.evaluate(X[i::npoints,:], X[i::npoints,:])
-        #     dXX = np.append(dXX, np.sum(GXX))
-        #
-        # # compute asymmetric kernel evaluations and assemble distance matrix
-        # distMat = np.zeros((npoints, npoints))
-        # print("Computing asymmetric kernel evaluations...")
-        # sys.stdout.flush() # workaround for messed-up progress bars
-        # for i in tqdm(range(npoints), disable = not showprogress):
-        #     for j in range(i):
-        #         GXY = self.kernel.evaluate(X[i::npoints,:], X[j::npoints,:])
-        #         distMat[i,j] = (dXX[i] + dXX[j] - 2*np.sum(GXY)) / self.M**2
-        # distMat = distMat + np.transpose(distMat)
+            # compute symmetric kernel evaluations
+            dXX = []
+            print("Computing symmetric kernel evaluations...")
+            sys.stdout.flush() # workaround for messed-up progress bars
+            for i in tqdm(range(npoints), disable = not showprogress):
+                GXX = self.kernel.evaluate(X[i::npoints,:], X[i::npoints,:])
+                dXX = np.append(dXX, np.sum(GXX))
+
+            # compute asymmetric kernel evaluations and assemble distance matrix
+            distMat = np.zeros((npoints, npoints))
+            print("Computing asymmetric kernel evaluations...")
+            sys.stdout.flush() # workaround for messed-up progress bars
+            for i in tqdm(range(npoints), disable = not showprogress):
+                for j in range(i):
+                    GXY = self.kernel.evaluate(X[i::npoints,:], X[j::npoints,:])
+                    distMat[i,j] = (dXX[i] + dXX[j] - 2*np.sum(GXY)) / self.M**2
+            distMat = distMat + np.transpose(distMat)
 
         # compute diffusion maps coordinates
         eigs = ml.diffusionMaps(distMat, epsi=self.epsi, n_components=n_components)
@@ -161,7 +162,7 @@ class KernelBurstTransitionManifold(TransitionManifold):
         return ml.evaluateDiffusionMaps(self.rc, n_components+1)[:,1::]
 
 
-@njit
+@njit(parallel=False)
 def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
     """
 
@@ -175,31 +176,22 @@ def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
 
     """
     npoints, M, dimension = X.shape
+    M_squared = M ** 2
 
     # compute symmetric kernel evaluations
     print("Computing symmetric kernel evaluations...")
     dXX = np.zeros(npoints)
     for i in prange(npoints):
-        GXX = _numba_gaussian_kernel_eval(X[i], X[i], sigma)
-        this_sum = 0
-        for k1 in prange(M):
-            for k2 in prange(M):
-                this_sum += GXX[k1, k2]
-        dXX[i] += this_sum
-        # dXX[i] = np.sum(GXX)
+        dXX[i] = _numba_gaussian_kernel_eval(X[i], X[i], sigma)
 
     # compute asymmetric kernel evaluations and assemble distance matrix
     print("Computing asymmetric kernel evaluations...")
     distMat = np.zeros((npoints, npoints))
     for i in prange(npoints):
-        for j in prange(i):
+        for j in range(i):
             # print(i, j)
-            GXY = _numba_gaussian_kernel_eval(X[i], X[j], sigma)
-            this_sum = 0
-            for k1 in prange(M):
-                for k2 in prange(M):
-                    this_sum += GXY[k1, k2]
-            distMat[i, j] = (dXX[i] + dXX[j] - 2 * this_sum) / M ** 2
+            this_sum = _numba_gaussian_kernel_eval(X[i], X[j], sigma)
+            distMat[i, j] = (dXX[i] + dXX[j] - 2 * this_sum) / M_squared
     return distMat + np.transpose(distMat)
 
 
@@ -216,16 +208,16 @@ def _numba_gaussian_kernel_eval(x: np.ndarray, y: np.ndarray, sigma: float):
 
     Returns
     -------
-    np.ndarray
-        shape = (# x points, # y points)
+    float
+        sum of kernel matrix
     """
-    out = np.zeros((x.shape[0], y.shape[0]))
+    out = 0
     for i in prange(x.shape[0]):
-        for j in prange(y.shape[0]):
+        for j in range(y.shape[0]):
             sqeucl_dist = 0
             for k in range(x.shape[1]):
-                sqeucl_dist += (x[i, k] - y[j, k]) ** 2
-            out[i, j] = np.exp(-sqeucl_dist / sigma)
+                sqeucl_dist += np.abs((x[i, k] - y[j, k]))  # * (x[i, k] - y[j, k])
+            out += np.exp(-sqeucl_dist / sigma)
     return out
 
 
