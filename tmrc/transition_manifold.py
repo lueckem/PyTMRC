@@ -162,7 +162,7 @@ class KernelBurstTransitionManifold(TransitionManifold):
         return ml.evaluateDiffusionMaps(self.rc, n_components+1)[:,1::]
 
 
-@njit(parallel=False)
+@njit(parallel=True)
 def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
     """
 
@@ -179,15 +179,16 @@ def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
     M_squared = M ** 2
 
     # compute symmetric kernel evaluations
-    print("Computing symmetric kernel evaluations...")
+    # print("Computing symmetric kernel evaluations...")
     dXX = np.zeros(npoints)
     for i in prange(npoints):
         dXX[i] = _numba_gaussian_kernel_eval(X[i], X[i], sigma)
 
     # compute asymmetric kernel evaluations and assemble distance matrix
-    print("Computing asymmetric kernel evaluations...")
+    # print("Computing asymmetric kernel evaluations...")
     distMat = np.zeros((npoints, npoints))
     for i in prange(npoints):
+        # print(i)
         for j in range(i):
             # print(i, j)
             this_sum = _numba_gaussian_kernel_eval(X[i], X[j], sigma)
@@ -195,7 +196,7 @@ def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
     return distMat + np.transpose(distMat)
 
 
-@njit(parallel=True)
+@njit(parallel=False)
 def _numba_gaussian_kernel_eval(x: np.ndarray, y: np.ndarray, sigma: float):
     """
     Parameters
@@ -211,14 +212,24 @@ def _numba_gaussian_kernel_eval(x: np.ndarray, y: np.ndarray, sigma: float):
     float
         sum of kernel matrix
     """
-    out = 0
-    for i in prange(x.shape[0]):
-        for j in range(y.shape[0]):
-            sqeucl_dist = 0
-            for k in range(x.shape[1]):
-                sqeucl_dist += np.abs((x[i, k] - y[j, k]))  # * (x[i, k] - y[j, k])
-            out += np.exp(-sqeucl_dist / sigma)
-    return out
+    # out = 0
+    # for i in prange(x.shape[0]):
+    #     for j in range(y.shape[0]):
+    #         sqeucl_dist = 0
+    #         for k in range(x.shape[1]):
+    #             sqeucl_dist += np.abs((x[i, k] - y[j, k]))  # * (x[i, k] - y[j, k])
+    #         out += np.exp(-sqeucl_dist / sigma)
+    # return out
+
+    nx = x.shape[0]
+    ny = y.shape[0]
+
+    X = np.sum(x * x, axis=1).reshape((nx, 1)) * np.ones((1, ny))
+    Y = np.sum(y * y, axis=1) * np.ones((nx, 1))
+    out = X + Y - 2 * np.dot(x, y.T)
+    out /= -sigma
+    np.exp(out, out)
+    return np.sum(out)
 
 
 # TM based on RKHS-embeddings of a single long trajectory
