@@ -181,7 +181,7 @@ def _numba_dist_matrix_gaussian_kernel(X: np.ndarray, sigma: float):
     # compute symmetric kernel evaluations
     # print("Computing symmetric kernel evaluations...")
     dXX = np.zeros(npoints)
-    for i in prange(npoints):
+    for i in range(npoints):
         dXX[i] = _numba_gaussian_kernel_eval(X[i], X[i], sigma)
 
     # compute asymmetric kernel evaluations and assemble distance matrix
@@ -212,15 +212,6 @@ def _numba_gaussian_kernel_eval(x: np.ndarray, y: np.ndarray, sigma: float):
     float
         sum of kernel matrix
     """
-    # out = 0
-    # for i in prange(x.shape[0]):
-    #     for j in range(y.shape[0]):
-    #         sqeucl_dist = 0
-    #         for k in range(x.shape[1]):
-    #             sqeucl_dist += np.abs((x[i, k] - y[j, k]))  # * (x[i, k] - y[j, k])
-    #         out += np.exp(-sqeucl_dist / sigma)
-    # return out
-
     nx = x.shape[0]
     ny = y.shape[0]
 
@@ -230,6 +221,32 @@ def _numba_gaussian_kernel_eval(x: np.ndarray, y: np.ndarray, sigma: float):
     out /= -sigma
     np.exp(out, out)
     return np.sum(out)
+
+
+@njit(parallel=False)
+def _numba_gaussian_kernel_eval_l0(x: np.ndarray, y: np.ndarray, sigma: float):
+    """
+    Parameters
+    ----------
+    x : np.ndarray
+        shape = (# x points, dimension)
+    y : np.ndarray
+        shape = (# y points, dimension)
+    sigma : float
+
+    Returns
+    -------
+    float
+        sum of kernel matrix
+    """
+    out = 0
+    sigma_inv = 1 / sigma
+    for i in prange(x.shape[0]):
+        for j in range(y.shape[0]):
+            # l0_norm = np.linalg.norm(x[i] - y[j], 2)
+            l0_norm = np.sum((x[i] - y[j]) != 0)
+            out += np.exp(-l0_norm * sigma_inv)
+    return out
 
 
 # TM based on RKHS-embeddings of a single long trajectory
